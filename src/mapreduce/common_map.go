@@ -1,7 +1,12 @@
 package mapreduce
 
 import (
+	"bufio"
+	"encoding/json"
+	"fmt"
 	"hash/fnv"
+	"log"
+	"os"
 )
 
 func doMap(
@@ -11,6 +16,42 @@ func doMap(
 	nReduce int, // the number of reduce task that will be run ("R" in the paper)
 	mapF func(filename string, contents string) []KeyValue,
 ) {
+	fmt.Printf("jobName: %s, mapTask: %d, inFile: %s, nReduce: %d\n", jobName, mapTask, inFile, nReduce)
+
+	file, err := os.Open(inFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	encs := make([]*json.Encoder, nReduce)
+	for idx := 0; idx < nReduce; idx++ {
+		fileName := reduceName(jobName, mapTask, idx)
+		file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+		encs[idx] = json.NewEncoder(file)
+	}
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		kvs := mapF(inFile, line)
+		for _, kv := range kvs {
+			hash := ihash(kv.Key) % nReduce
+			err := encs[hash].Encode(&kv)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+
 	//
 	// doMap manages one map task: it should read one of the input files
 	// (inFile), call the user-defined map function (mapF) for that file's
