@@ -32,3 +32,7 @@ type GetReply struct {
 	Err         Err
 	Value       string
 }
+
+func (arg *PutAppendArgs) copy() PutAppendArgs {
+	return PutAppendArgs{arg.Key, arg.Value, arg.Op}
+}

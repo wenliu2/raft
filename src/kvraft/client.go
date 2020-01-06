@@ -1,13 +1,20 @@
 package raftkv
 
-import "labrpc"
-import "crypto/rand"
-import "math/big"
+import (
+	"crypto/rand"
+	"labrpc"
+	"math/big"
+	"time"
+)
 
+const RetryInterval = time.Duration(125 * time.Millisecond)
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// You will have to modify this struct.
+
+	//index of leader
+	leader int
 }
 
 func nrand() int64 {
@@ -20,6 +27,7 @@ func nrand() int64 {
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
+	ck.leader = 0
 	// You'll have to add code here.
 	return ck
 }
@@ -54,6 +62,23 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
+	serverIdx := ck.leader
+	for {
+		DPrintf("key: %s, value: %s, op: %s\n", key, value, op)
+		var args = PutAppendArgs{key, value, op}
+		var reply = PutAppendReply{false, ""}
+		DPrintf("Call server: %d\n", serverIdx)
+		ok := ck.servers[serverIdx].Call("KVServer.PutAppend", &args, &reply)
+		DPrintf("Reply: %v\n", reply)
+		if ok && reply.Err == "" {
+			ck.leader = serverIdx
+			break
+		} else {
+			serverIdx = (serverIdx + 1) % len(ck.servers)
+			time.Sleep(RetryInterval)
+		}
+	}
+	DPrintf("Call server %d successfully\n", serverIdx)
 }
 
 func (ck *Clerk) Put(key string, value string) {

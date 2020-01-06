@@ -8,15 +8,25 @@ import (
 	"sync"
 )
 
-const Debug = 0
+/*Debug debug flag
+ * > 0 will print Debug message
+ */
+const Debug = 1
 
+func init() {
+	labgob.Register(GetArgs{})
+	labgob.Register(PutAppendArgs{})
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+}
+
+/*DPrintf print given string to console
+ */
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug > 0 {
 		log.Printf(format, a...)
 	}
 	return
 }
-
 
 type Op struct {
 	// Your definitions here.
@@ -35,13 +45,26 @@ type KVServer struct {
 	// Your definitions here.
 }
 
-
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
+	// my implementation:
+	DPrintf("PutAppend is called with arg: %v\n", args)
+	index, term, isLeader := kv.rf.Start(args.copy())
+	reply.Err = ""
+	reply.WrongLeader = false
+	if !isLeader {
+		DPrintf("Start fail due to wrong leader.")
+		reply.WrongLeader = true
+		reply.Err = "WrongLeader"
+	} else {
+		reply.Err = ""
+		reply.WrongLeader = false
+		DPrintf("Start success with return: index=%d, term=%d\n", index, term)
+	}
 }
 
 //
@@ -53,6 +76,13 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 func (kv *KVServer) Kill() {
 	kv.rf.Kill()
 	// Your code here, if desired.
+}
+
+func (kv *KVServer) debugApplyCh() {
+	for c := range kv.applyCh {
+		DPrintf("Got command: %v", c)
+	}
+	DPrintf("Quit")
 }
 
 //
@@ -82,6 +112,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
+	//go kv.debugApplyCh()
 
 	// You may need initialization code here.
 
